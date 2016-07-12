@@ -1,5 +1,8 @@
 src/angular_flask/static/project_folders
 
+#virtualenv
+.venv
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
