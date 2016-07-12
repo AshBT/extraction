@@ -263,7 +263,7 @@ def delete_project_folder():
 def project_folders():
     folders = next(os.walk(os.path.join(os.path.join(app.static_folder, 'project_folders'))))[1]
     folders.remove('_blank')
-    return jsonify(project_folders = folders)
+    return jsonify(project_folders = sorted(folders))
 
 @app.route('/project_folder', methods=['POST'])
 def project_folder():
