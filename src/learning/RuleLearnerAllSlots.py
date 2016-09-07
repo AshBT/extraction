@@ -45,7 +45,7 @@ def run(page_file_dir, ignore_files = []):
     else:
         files = [f for f in os.listdir(page_file_dir) if os.path.isfile(os.path.join(page_file_dir, f))]
         for the_file in files:
-            if the_file.startswith('.') or the_file == 'markup.json' or the_file == 'rules.json' or the_file in ignore_files:
+            if the_file.startswith('.') or the_file.endswith('.jl') or the_file.endswith('.json') or the_file in ignore_files:
                 continue
              
             with codecs.open(os.path.join(page_file_dir, the_file), "r", "utf-8") as myfile:

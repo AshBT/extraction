@@ -49,7 +49,7 @@ class TruffleShuffle(object):
         for itr in range(iterations):
             shuffle(cluster_members) # randomly orders them
             random_members = cluster_members[0:sub_sample_size] # get the sub-sample
-            template = self.induce_template(random_members)
+            template = self.induce_template(random_members).getStripes()
 
             stripe_texts = []
             for stripe in template:
@@ -86,11 +86,11 @@ class TruffleShuffle(object):
 
     def induce_template(self, cluster_members):
         sub_page_mgr = PageManager()
-        for id in cluster_members:
-            curr_page = self.__page_manager.getPage(id)
-            sub_page_mgr.addPage(id, curr_page.string)
+        for page_id in cluster_members:
+            curr_page = self.__page_manager.getPage(page_id)
+            sub_page_mgr.addPage(page_id, curr_page.string, add_special_tokens=False)
         sub_page_mgr.learnStripes()
-        return sub_page_mgr.getStripes()
+        return sub_page_mgr
 
     def prep_truffles_to_shuffle(self):
         all_chunks = set()
@@ -118,6 +118,103 @@ class TruffleShuffle(object):
 #         print str(len(all_chunks)) + " chunks left after filtering"
 #         print str(all_pages_sz) + " pages total"
         return all_chunks, page_chunks_map
+
+    def __test_good_merge(self, potential_cluster_template, test_cluster_template):
+        good_merge = False
+        (old_visible_count, old_invisible_count) = potential_cluster_template.countTokenInfoInStripes()
+        old_clean_slot_count = potential_cluster_template.countCleanSlots()
+        print '\t\told_visible = ' + str(old_visible_count)
+        print '\t\told_invisible = ' + str(old_invisible_count)
+        print '\t\told_clean_slot_count = ' + str(old_clean_slot_count)
+        
+        (new_visible_count, new_invisible_count) = test_cluster_template.countTokenInfoInStripes()
+        new_clean_slot_count = test_cluster_template.countCleanSlots()
+        print '\t\tnew_visible = ' + str(new_visible_count)
+        print '\t\tnew_invisible = ' + str(new_invisible_count)
+        print '\t\tnew_clean_slot_count = ' + str(new_clean_slot_count)
+        
+        if old_invisible_count == new_invisible_count and new_visible_count <= old_visible_count:
+            good_merge = True
+        if new_clean_slot_count >= old_clean_slot_count:
+            good_merge = True
+        
+        return good_merge
+    
+    def __test_good_merge_template_string(self, potential_cluster_template_string, test_cluster_template_string):
+        good_merge = False
+        test_template = PageManager()
+        test_template.addPage('potential', potential_cluster_template_string, add_special_tokens=False)
+        test_template.addPage('test', test_cluster_template_string, add_special_tokens=False)
+        test_template.learnStripes()
+        print len(test_template._stripes)
+        if len(test_template._stripes) < 2:
+            good_merge = True
+        
+        return good_merge, ' '.join(value['stripe'] for value in test_template._stripes)
+
+    def __merge_clusters_template_string(self, final_clusters):
+        merged_clusters = {}
+        for final_cluster_rule in sorted(final_clusters, key=lambda x: final_clusters[x]['NAME']):
+            final_cluster_name = final_clusters[final_cluster_rule]['NAME']
+            print 'testing ' + final_cluster_name + " ..."
+            c_i = final_clusters[final_cluster_rule]
+            did_merge = False
+            for rule in merged_clusters:
+                cluster_name = merged_clusters[rule]['NAME']
+                print '\tgenerating merged template with ' + cluster_name + " ..."
+                merged = merged_clusters[rule]
+                good_merge, merged_template_string = self.__test_good_merge_template_string(c_i['TEMPLATE_STRING'], merged['TEMPLATE_STRING'])
+                if good_merge:
+                    merged_clusters[rule]['MEMBERS'].extend(c_i['MEMBERS'])
+                    merged_clusters[rule]['TEMPLATE_STRING'] = merged_template_string
+                    did_merge = True
+                    print 'merging ' + final_cluster_name
+                    print '\tinto ' + cluster_name
+                    print '\tnew_template = ' + merged_template_string
+                    break
+                
+            if not did_merge:
+                merged_clusters[final_cluster_rule] = c_i
+            
+        return merged_clusters
+                
+    def __merge_clusters(self, final_clusters):
+        merged_clusters = {}
+        merged_clusters_pms = {}
+        for final_cluster_rule in sorted(final_clusters, key=lambda x: final_clusters[x]['NAME']):
+            final_cluster_name = final_clusters[final_cluster_rule]['NAME']
+            print 'testing ' + final_cluster_name + " ..."
+            c_i = final_clusters[final_cluster_rule]
+            if final_cluster_rule in merged_clusters_pms:
+                c_i_template = merged_clusters_pms[final_cluster_rule]
+            else:
+                c_i_template = self.induce_template(c_i['MEMBERS'][:5])
+            
+            did_merge = False
+            for rule in merged_clusters:
+                cluster_name = merged_clusters[rule]['NAME']
+                print '\tgenerating merged template with ' + cluster_name + " ..."
+                merged = merged_clusters[rule]
+                
+                new_members = c_i['MEMBERS'][:5]
+                new_members.extend(merged['MEMBERS'][:5])
+                merged_cluster_template = self.induce_template(new_members)
+                
+                if self.__test_good_merge(c_i_template, merged_cluster_template):
+                    ###add c_i to merged - really just adding the pages to it for now
+                    merged_clusters[rule]['MEMBERS'].extend(c_i['MEMBERS'])
+                    merged_clusters_pms[rule] = merged_cluster_template
+                    
+                    did_merge = True
+                    print 'merging ' + final_cluster_name
+                    print '\tinto ' + cluster_name
+                    break
+                    
+            if not did_merge:
+                merged_clusters[final_cluster_rule] = c_i
+                merged_clusters_pms[final_cluster_rule] = c_i_template
+            
+        return merged_clusters
 
     ##############################
     #
@@ -187,8 +284,17 @@ class TruffleShuffle(object):
                         'MEMBERS': pids,
                         'ANCHOR': rule_anchors[rule]
                     }
+        
+        clusterCount = 1
+        for rule in sorted(final_clusters, key=lambda x: len(final_clusters[x]['MEMBERS']), reverse=True):
+            
+            final_clusters[rule]['NAME'] = 'cluster' + format(clusterCount, '03')
+            template = self.induce_template(final_clusters[rule]['MEMBERS'])
+            template.learnStripes()
+            final_clusters[rule]['TEMPLATE_STRING'] = ' '.join(value['stripe'] for value in template._stripes)
+            clusterCount += 1
 
-        return final_clusters
+        return self.__merge_clusters(final_clusters)
 
 class TruffleShuffleExperimenter(object):
     def __init__(self, truthfile='/Users/matt/Projects/memex/memexpython/Matt_Memex_Data/classified-ads-list.csv',

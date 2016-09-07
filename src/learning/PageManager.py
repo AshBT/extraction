@@ -13,6 +13,11 @@ from operator import itemgetter
 from __builtin__ import int
 from postprocessing.PostProcessor import RemoveHtml
 
+## TODO BA
+# Figure out why slow on
+# /Table should still work
+
+
 cachedStopWords = stopwords.words("english")
 cachedStopWords.append(',')
 cachedStopWords.append('.')
@@ -416,7 +421,7 @@ class PageManager(object):
                     invisible_token_buffer_before.append(token.token)
         return set(chunks)
     
-    def getVisibleTokenStructure(self, data_as_strings=True):
+    def getVisibleTokenStructure(self, data_as_strings=True, data_as_tokens=False):
         datas = []
         for page_id in self._pages:
             page = self.getPage(page_id)
@@ -430,8 +435,12 @@ class PageManager(object):
                     continue
                 if token.visible:
                     if token.whitespace_text and previous_visible:
-                        visible_token_buffer.append(' ')
-                    visible_token_buffer.append(token.token)
+                        if not data_as_tokens:
+                            visible_token_buffer.append(' ')
+                    if data_as_tokens:
+                        visible_token_buffer.append(token)
+                    else:
+                        visible_token_buffer.append(token.token)
                     if first_vis_token is None:
                         first_vis_token = token
                     previous_visible = True
@@ -717,8 +726,9 @@ class PageManager(object):
                 self.blacklist_locations[page_id] = []
             
             for markup in markups[page_id]:
-                #TODO: ADD starting_token_location and end_token_location
-                if 'extract' in markups[page_id][markup] and 'sequence' not in markups[page_id][markup]:
+                if 'starting_token_location' in markups[page_id][markup] and 'ending_token_location' in markups[page_id][markup]:
+                    self.blacklist_locations[page_id].extend(range(markups[page_id][markup]['starting_token_location'], markups[page_id][markup]['ending_token_location']))
+                elif 'extract' in markups[page_id][markup] and 'sequence' not in markups[page_id][markup]:
                     shortest_pairs = self.getPossibleLocations(page_id, markups[page_id][markup]['extract'])
                     if not shortest_pairs:
                         logger.info("Unable to find markup for %s on page %s: %s", markup, page_id, markups[page_id][markup]['extract'])
@@ -997,7 +1007,11 @@ class PageManager(object):
          
         #get visible chunk(s) before
         if begin_stripes:
-            real_stripe = self.getStripeFragmentsForSlot(begin_stripes[-1])
+            if begin_stripes[-1]['level'] == 99: # This is a "last mile stripe" so use the one before it if we have it
+                if len(begin_stripes) > 1:
+                    real_stripe = self.getStripeFragmentsForSlot(begin_stripes[-2])
+            else:
+                real_stripe = self.getStripeFragmentsForSlot(begin_stripes[-1])
             start_location = real_stripe[-1]['page_locations'][self.seed_page_id] + real_stripe[-1]['tuple_size'] - 1
             end_location = real_stripe[0]['page_locations'][self.seed_page_id]
             visible_token_count = 0
@@ -1012,7 +1026,11 @@ class PageManager(object):
          
         #and after
         if end_stripes:
-            real_stripe = self.getStripeFragmentsForSlot(end_stripes[0])
+            if end_stripes[0]['level'] == 99: # This is a "last mile stripe" so use the one before it if we have it
+                if len(end_stripes) > 1:
+                    real_stripe = self.getStripeFragmentsForSlot(end_stripes[1])
+            else:
+                real_stripe = self.getStripeFragmentsForSlot(end_stripes[0])
             start_location = real_stripe[0]['page_locations'][self.seed_page_id]
             end_location = real_stripe[-1]['page_locations'][self.seed_page_id] + real_stripe[-1]['tuple_size']
             visible_token_count = 0
@@ -1054,18 +1072,30 @@ class PageManager(object):
             #find the locations AGAIN for now... TODO: Fix this!
             for page in pages:
                 page_id = page.keys()[0]
-                if 'extract' in page[page_id]:
+
+                if 'starting_token_location' in page[page_id] and 'ending_token_location' in page[page_id]:
+                    begin_stripe = exact_bounding_stripes.bounding_stripes[0]
+                    end_stripe = exact_bounding_stripes.bounding_stripes[1]
+
+                    if begin_stripe['page_locations'][page_id] + begin_stripe['tuple_size'] <= page[page_id]['starting_token_location'] and \
+                                            end_stripe['page_locations'][page_id] + end_stripe['tuple_size'] >= page[page_id]['ending_token_location']:
+                        start_points[page_id] = begin_stripe['page_locations'][page_id] + begin_stripe['tuple_size']
+                        if begin_stripe['page_locations'][page_id] + begin_stripe['tuple_size'] != page[page_id]['starting_token_location']:
+                            begin_goto_points[page_id] = page[page_id]['starting_token_location'] - 1
+                        if end_stripe['page_locations'][page_id] - 1 != page[page_id]['ending_token_location']:
+                            end_goto_points[page_id] = page[page_id]['ending_token_location'] + 1
+                elif 'extract' in page[page_id]:
                     extract = page[page_id]['extract']
-                    
                     #print "extract:", extract
-                    #TODO: ADD starting_token_location and end_token_location 
+
                     shortest_pairs = self.getPossibleLocations(page_id, extract, False)
                     begin_stripe = exact_bounding_stripes.bounding_stripes[0]
                     end_stripe = exact_bounding_stripes.bounding_stripes[1]
+
                     for pair in shortest_pairs:
                         if begin_stripe['page_locations'][page_id]+begin_stripe['tuple_size'] <= pair[0] and  \
                            end_stripe['page_locations'][page_id]+end_stripe['tuple_size'] >= pair[1]:
-                            start_points[page_id] = begin_stripe['page_locations'][page_id]+begin_stripe['tuple_size'] + 1
+                            start_points[page_id] = begin_stripe['page_locations'][page_id]+begin_stripe['tuple_size']
                             if begin_stripe['page_locations'][page_id]+begin_stripe['tuple_size'] != pair[0]:
                                 begin_goto_points[page_id] = pair[0] - 1
                             if end_stripe['page_locations'][page_id]-1 != pair[1]:
@@ -1121,6 +1151,8 @@ class PageManager(object):
         if item_rule is None:
             #This is the case where we are not given the start and end of the list so we need to learn it based on number 1 and last
             # Unless the markup contains starting_token_location and ending_token_location
+            
+            logger.info("No item rule learned for %s attempting to learn from locations or first and last items.", key)
             for page_markup in pages:
                 extract = u''
                 starting_token_location = -1
@@ -1150,6 +1182,16 @@ class PageManager(object):
                             stripes_to_remove.append(stripe)
                     self._stripes = [x for x in self._stripes if x not in stripes_to_remove]
                 if extract and end_extract:
+                    # TODO: BA check this
+                    # see if there are locations for this thing... if so remove those stripes in the middle... we have to!
+                    shortest_pairs = self.getPossibleLocations(page_id, extract + LONG_EXTRACTION_SEP + end_extract, False)
+                    for pair in shortest_pairs:
+                        list_range = range(pair[0], pair[1])
+                        stripes_to_remove = []
+                        for stripe in self._stripes:
+                            if stripe['page_locations'][page_id] in list_range:
+                                stripes_to_remove.append(stripe)
+                        self._stripes = [x for x in self._stripes if x not in stripes_to_remove]
                     page_markup[page_id]['extract'] = extract + LONG_EXTRACTION_SEP + end_extract            
             (item_rule, isSequence, hasSubRules) = self.__learn_item_rule(key, pages)
         
@@ -1174,7 +1216,72 @@ class PageManager(object):
         #This is for any sub_rules in the sequence
         sub_rules_markup = {}
         sub_rules_page_manager = PageManager(self._WRITE_DEBUG_FILES, self.largest_tuple_size)
-                                
+        
+        #first get the "bounding stripes" for all the items... this will help us figure out "which one" we want
+#         location_finder_page_manager = PageManager(self._WRITE_DEBUG_FILES, self.largest_tuple_size)
+#         
+#         extracts = []
+#         commmon_tokens_before_singles = []
+#         commmon_tokens_after_singles = []
+#         for page_markup in pages:
+#             page_id = page_markup.keys()[0]
+#             if 'sequence' in page_markup[page_id]:
+#                 page = self.getPage(page_id)
+#                 page_string = page.getString()
+#                 
+#                 full_sequence = item_rule.apply(page_string)
+#                 location_finder_page_manager.addPage(page_id, full_sequence['extract'])
+#                 for item_1 in page_markup[page_id]['sequence']:
+#                     sequence_number = item_1['sequence_number']
+#                     extracts.append((page_id, item_1['extract']))
+#         for (page_id, extract) in extracts:
+#             locations_of_item = location_finder_page_manager.getPossibleLocations(page_id, extract)
+#             if len(locations_of_item) == 1:
+#                 if locations_of_item[0][0] > 1:
+#                     begin_location = locations_of_item[0][0]
+#                     tokens_before = list(reversed(location_finder_page_manager.getPage(page_id).tokens[begin_location-5:begin_location]))
+#                     commmon_tokens_before_singles.append(tokens_before)
+#                 if locations_of_item[0][1] < len(location_finder_page_manager.getPage(page_id).tokens):
+#                     end_location = locations_of_item[0][1]
+#                     tokens_after = list(reversed(location_finder_page_manager.getPage(page_id).tokens[end_location+1:end_location+6]))
+#                     commmon_tokens_after_singles.append(tokens_after)
+#                     
+#         string_before = ''
+#         for i in range(5):
+#             new_token = ''
+#             num_with_new_token = 0
+#             for common_token in commmon_tokens_before_singles:
+#                 if new_token:
+#                     if common_token[i].token == new_token:
+#                         num_with_new_token += 1
+#                 else:
+#                     new_token = common_token[i].token
+#                     num_with_new_token += 1
+#             
+#             if num_with_new_token == len(commmon_tokens_before_singles):
+#                 string_before = new_token + string_before
+#             else:
+#                 break
+#         print string_before
+#         
+#         string_after = ''
+#         for i in range(5):
+#             new_token = ''
+#             num_with_new_token = 0
+#             for common_token in commmon_tokens_after_singles:
+#                 if new_token:
+#                     if common_token[i].token == new_token:
+#                         num_with_new_token += 1
+#                 else:
+#                     new_token = common_token[i].token
+#                     num_with_new_token += 1
+#             
+#             if num_with_new_token == len(commmon_tokens_after_singles):
+#                 string_after = new_token + string_after
+#             else:
+#                 break
+#         print string_after
+                    
         for page_markup in pages:
             page_id = page_markup.keys()[0]
             
@@ -1192,8 +1299,11 @@ class PageManager(object):
                 last_row_text_item1 = ''
                 last_row_goto_point = 0
                 highest_sequence_number = 0
+                
+                previous_item_location_end = 0
                 #first find the item on the page
-                for item_1 in page_markup[page_id]['sequence']:
+                for item_1 in sorted(page_markup[page_id]['sequence'], key=lambda k: k['sequence_number']):
+#                 for item_1 in page_markup[page_id]['sequence']:
                     sequence_number = item_1['sequence_number']
                     if 'starting_token_location' in item_1 and 'ending_token_location' in item_1:
                         locations_of_item1 = [ [ item_1['starting_token_location'], item_1['ending_token_location'] ] ]
@@ -1202,16 +1312,28 @@ class PageManager(object):
                         location_finder_page_manager.addPage(page_id, full_sequence['extract'])
                         locations_of_item1 = location_finder_page_manager.getPossibleLocations(page_id, item_1['extract'])
                     
-                    #TODO figure out if there is more than one location what we do...
                     if len(locations_of_item1) > 0:
-                    
+                        item1_start_location = locations_of_item1[0][0]
+                        item1_end_location = locations_of_item1[0][1]
+                        if len(locations_of_item1) > 1:
+                            #TODO: FIX ME! for now just take the "smallest" window that is after the last sequence items "location"
+                            for location in locations_of_item1[1:]:
+                                start_location = location[0]
+                                end_location = location[1]
+                                if end_location - start_location < item1_end_location - item1_start_location and start_location > previous_item_location_end:
+                                    item1_start_location = start_location
+                                    item1_end_location = end_location
+                                    
+                        previous_item_location_end = item1_end_location
+                        
                         #build the sub_markups and pages as we are looking through the sequence
                         for item in item_1:
                             sub_page_id = page_id+key+"_sub"+str(sequence_number)
-                            if item not in ['begin_index', 'end_index', 'starting_token_location', 'ending_token_location', 'extract', 'sequence', 'sequence_number']:
+                            if item not in ['begin_index', 'end_index', 'starting_token_location', \
+                                            'ending_token_location', 'extract', 'sequence', 'sequence_number']:
                                 sub_page_text = ''
                                 tokens_with_detail = location_finder_page_manager.getPage(page_id).tokens
-                                for index in range(locations_of_item1[0][0], locations_of_item1[0][1]+1):
+                                for index in range(item1_start_location, item1_end_location+1):
                                     token_with_detail = tokens_with_detail[index]
                                     if token_with_detail.whitespace_text:
                                         sub_page_text = sub_page_text + token_with_detail.whitespace_text
@@ -1223,6 +1345,24 @@ class PageManager(object):
                                 
                                 #TODO: ADD starting_token_location and end_token_location 
                                 locations_of_sub_item = sub_rules_page_manager.getPossibleLocations(sub_page_id, item_1[item]['extract'])
+                                if len(locations_of_sub_item) == 0:
+                                    # if this is a sequence try to find the markup by the first and last item *if it has more than 1 thing
+                                    sub_extract = ''
+                                    sub_end_extract = ''
+                                    if 'sequence' in item_1[item]:
+                                        highest_sequence_number = 0
+                                        for sub_list_item in item_1[item]['sequence']:
+                                            sub_sequence_number = sub_list_item['sequence_number']
+                                            if sub_sequence_number == 1:
+                                                sub_extract = sub_extract + sub_list_item['extract']
+                                            elif sub_sequence_number > highest_sequence_number:
+                                                highest_sequence_number = sub_sequence_number
+                                                sub_end_extract = sub_list_item['extract']
+                                        if sub_extract and sub_end_extract:
+                                            # TODO: BA check this
+                                            item_1[item]['extract'] = sub_extract + LONG_EXTRACTION_SEP + sub_end_extract
+                                            locations_of_sub_item = sub_rules_page_manager.getPossibleLocations(sub_page_id, sub_extract + LONG_EXTRACTION_SEP + sub_end_extract, False)
+                                
                                 if len(locations_of_sub_item) > 0:
                                     sub_page_item_text = ''
                                     tokens_with_detail = sub_rules_page_manager.getPage(sub_page_id).tokens
@@ -1242,15 +1382,16 @@ class PageManager(object):
                         for item in page_markup[page_id]['sequence']:
                             if item['sequence_number'] == sequence_number + 1:
                                 item_2 = item
-                                break;
+                                break
                         
                         text_item1 = ''
                         tokens_with_detail = location_finder_page_manager.getPage(page_id).tokens
-                        for index in range(locations_of_item1[0][0], locations_of_item1[0][1]+1):
+                        for index in range(item1_start_location, item1_end_location+1):
                             token_with_detail = tokens_with_detail[index]
                             if token_with_detail.whitespace_text:
                                 text_item1 = text_item1 + token_with_detail.whitespace_text
                             text_item1 = text_item1 + tokens_with_detail[index].token
+                        text_item1 = text_item1.strip()
                         
                         if item_2:
                             if 'starting_token_location' in item_2 and 'ending_token_location' in item_2:
@@ -1258,63 +1399,88 @@ class PageManager(object):
                             else:
                                 locations_of_item2 = location_finder_page_manager.getPossibleLocations(page_id, item_2['extract'])
                             
-                            #TODO figure out if there is more than one location what we do...
                             if len(locations_of_item2) > 0:
+                                item2_start_location = locations_of_item2[0][0]
+                                item2_end_location = locations_of_item2[0][1]
+                                if len(locations_of_item2) > 1:
+                                    #TODO: FIX ME! for now just take the "smallest" window that is after item1's location
+                                    for location in locations_of_item2[1:]:
+                                        start_location = location[0]
+                                        end_location = location[1]
+                                        if end_location - start_location < item2_end_location - item2_start_location and start_location > item1_end_location:
+                                            item2_start_location = start_location
+                                            item2_end_location = end_location
+                                
                                 text_between = ''
-                                for index in range(locations_of_item1[0][1]+1, locations_of_item2[0][0]):
+                                for index in range(item1_end_location+1, item2_start_location):
                                     token_with_detail = tokens_with_detail[index]
                                     if token_with_detail.whitespace_text:
                                         text_between = text_between + token_with_detail.whitespace_text
                                     text_between = text_between + tokens_with_detail[index].token
                                     
-                                text_between = text_between.replace(PAGE_BEGIN, '').replace(PAGE_END, '')
+                                text_between = text_between.replace(PAGE_BEGIN, '').replace(PAGE_END, '').strip()
                                 
-#                                 print page_id+str(sequence_number) + "--- " + text_between
-                                begin_sequence_page_manager.addPage("begin"+key+page_id+str(sequence_number), text_between, False)
-                                begin_sequence_starts["begin"+key+page_id+str(sequence_number)] = 0
-                                # TODO: where does this really "end"
-                                begin_sequence_goto_points = locations_of_item1[0][0]
-                                
-                                end_sequence_page_manager.addPage("end"+key+page_id+str(sequence_number), text_item1+text_between, False)
-                                end_sequence_markup["end"+key+page_id+str(sequence_number)] = {}
-                                end_sequence_markup["end"+key+page_id+str(sequence_number)]['item'] = {}
-                                end_sequence_markup["end"+key+page_id+str(sequence_number)]['item']['extract'] = text_item1
-                                end_sequence_starts["end"+key+page_id+str(sequence_number)] = 0
-                                end_sequence_goto_points["end"+key+page_id+str(sequence_number)] = locations_of_item1[0][1] - locations_of_item1[0][0]
+                                if text_between:
+#                                     print page_id+str(sequence_number) + "--- " + text_between
+                                    begin_sequence_page_manager.addPage("begin"+key+page_id+str(sequence_number), text_between, False)
+                                    begin_sequence_starts["begin"+key+page_id+str(sequence_number)] = 0
+                                    # TODO: where does this really "end"
+                                    begin_sequence_goto_points["begin"+key+page_id+str(sequence_number)] = len(tokenize(text_between))-1
+                                    
+                                    end_sequence_page_manager.addPage("end"+key+page_id+str(sequence_number), text_item1+text_between, False)
+                                    end_sequence_markup["end"+key+page_id+str(sequence_number)] = {}
+                                    end_sequence_markup["end"+key+page_id+str(sequence_number)]['item'] = {}
+                                    end_sequence_markup["end"+key+page_id+str(sequence_number)]['item']['extract'] = text_item1
+                                    end_sequence_starts["end"+key+page_id+str(sequence_number)] = 0
+                                    end_sequence_goto_points["end"+key+page_id+str(sequence_number)] = item1_end_location - item1_start_location + 1
                         
-                        #add what is in front of this one to the begin_sequence_page_manager
+                        # add what is in front of this one to the begin_sequence_page_manager
                         if sequence_number == 1:
+                            # TODO: BA we need to figure out these token locations to really work!!
+                            list_begin_index = 0
+                            if 'starting_token_location' in page_markup[page_id]:
+                                list_begin_index = page_markup[page_id]['starting_token_location']
+
                             text_between = ''
 #                             tokens_with_detail = location_finder_page_manager.getPage(page_id).tokens
-                            for index in range(0, locations_of_item1[0][0]):
+                            for index in range(list_begin_index, item1_start_location):
                                 token_with_detail = tokens_with_detail[index]
                                 if token_with_detail.whitespace_text:
                                     text_between = text_between + token_with_detail.whitespace_text
                                 text_between = text_between + tokens_with_detail[index].token
-                            text_between = text_between.replace(PAGE_BEGIN, '').replace(PAGE_END, '')
+                            text_between = text_between.replace(PAGE_BEGIN, '').replace(PAGE_END, '').strip()
                             
                             if text_between:
 #                                 print page_id+"0" + "--- " + text_between
                                 begin_sequence_page_manager.addPage("begin"+key+page_id+"0", text_between, False)
+                                begin_sequence_starts["begin"+key+page_id+"0"] = 0
+                                # TODO: where does this really "end"
+                                begin_sequence_goto_points["begin"+key+page_id+"0"] = len(tokenize(text_between))-1
                             else:
                                 num_with_nothing_at_begin = num_with_nothing_at_begin + 1
-                            
+
+                        # and add what is after this one to the end_sequence_page_manager
                         if sequence_number > highest_sequence_number:
                             highest_sequence_number = sequence_number
-                            
+
+                            # TODO: BA we need to figure out these token locations to really work!!
+                            list_end_index = len(tokens_with_detail)
+                            if 'ending_token_location' in page_markup[page_id]:
+                                list_end_index = page_markup[page_id]['ending_token_location']
+
                             text_between = ''
 #                             tokens_with_detail = location_finder_page_manager.getPage(page_id).tokens
-                            for index in range(locations_of_item1[0][1]+1, len(tokens_with_detail)):
+                            for index in range(item1_end_location+1, list_end_index):
                                 token_with_detail = tokens_with_detail[index]
                                 if token_with_detail.whitespace_text:
                                     text_between = text_between + token_with_detail.whitespace_text
                                 text_between = text_between + tokens_with_detail[index].token
                             
-                            last_row_text = text_between.replace(PAGE_BEGIN, '').replace(PAGE_END, '')
+                            last_row_text = text_between.replace(PAGE_BEGIN, '').replace(PAGE_END, '').strip()
                             last_row_text_item1 = text_item1
                             last_row_text_object = {}
                             last_row_text_object['extract'] = text_item1
-                            last_row_goto_point = locations_of_item1[0][1] - locations_of_item1[0][0]
+                            last_row_goto_point = item1_end_location - item1_start_location + 1
                     else:
                         logger.info("Unable to find markup for sequence number %s on page %s: %s", sequence_number, page_id, item_1['extract'])
                 if last_row_text:
@@ -1340,16 +1506,24 @@ class PageManager(object):
             begin_iter_rule = begin_sequence_page_manager.buildRule(begin_stripes)
             if not begin_iter_rule:
                 logger.info("Unable to find begin_iter_rule. Attempting to learn last mile.")
-                logger.info("Could not learn last mile!!!")      
-                begin_iter_rule = "##ERRROR##"
+                last_mile = begin_sequence_page_manager.__find_last_mile(begin_sequence_starts, begin_sequence_goto_points, 'begin')
+                if last_mile:
+                    last_mile_stripes = []
+                    last_mile_stripes.append(last_mile)
+                    begin_iter_rule = begin_sequence_page_manager.buildRule(last_mile_stripes)
+                else:
+                    logger.info("Could not learn last mile!!!")
+                    begin_iter_rule = "##ERRROR##"
         except:
             logger.info("Unable to find begin_iter_rule. Attempting to learn last mile.")
-            logger.info("Could not learn last mile!!!")      
-            begin_iter_rule = "##ERRROR##"
             last_mile = begin_sequence_page_manager.__find_last_mile(begin_sequence_starts, begin_sequence_goto_points, 'begin')
-            last_mile_stripes = []
-            last_mile_stripes.append(last_mile)
-            end_iter_rule = end_sequence_page_manager.buildRule(last_mile_stripes)
+            if last_mile:
+                last_mile_stripes = []
+                last_mile_stripes.append(last_mile)
+                begin_iter_rule = begin_sequence_page_manager.buildRule(last_mile_stripes)
+            else:
+                logger.info("Could not learn last mile!!!")
+                begin_iter_rule = "##ERRROR##"
         
         try:
             #HACK FOR MATTs STUFF TO "Make the stripe" - Actually this way be the way we want to do it
@@ -1807,7 +1981,7 @@ class PageManager(object):
             text_start = start_and_stop[0]
             start_locations = self.getPossibleLocations(page_id, text_start, exact_match)
             
-            text_end = start_and_stop[1]
+            text_end = start_and_stop[-1]
             end_locations = self.getPossibleLocations(page_id, text_end, exact_match)
             
         poss_match_pairs = []
@@ -2138,6 +2312,9 @@ class PageManager(object):
         return merged
     
     def __find_last_mile(self, start_indexes, goto_points, direction = 'begin'):
+        # TODO: BA Figure out why goto_points is empty??
+        if not goto_points:
+            return None
         last_mile = self.__find_last_mile_recurse(start_indexes, goto_points, direction, [])
         if last_mile:
             seed_page_id = goto_points.keys()[0]
@@ -2190,7 +2367,7 @@ class PageManager(object):
                     return
                 
                 other_next_token = None
-                if other_next_token_index in page.tokens:
+                if other_next_token_index < len(page.tokens):
                     other_next_token = page.tokens[other_next_token_index]
                     
                 if other_next_token is None or next_token.token != other_next_token.token:

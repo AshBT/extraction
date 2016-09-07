@@ -124,6 +124,16 @@ def change_page_name():
 
         return jsonify(new_file_name = new_file_name)
 
+@app.route('/delete_markup_url', methods=['POST'])
+def delete_markup_url():
+    if request.method == 'POST':
+        data = request.get_json(force=True)
+        file_name = data['file_name']
+        project_folder = data['project_folder']
+        os.remove(os.path.join(app.static_folder, 'project_folders', project_folder, file_name))
+        
+        return jsonify(file_name = file_name)
+    
 @app.route('/delete_rule', methods=['POST'])
 def delete_rule():
     if request.method == 'POST':

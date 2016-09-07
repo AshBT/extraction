@@ -18,7 +18,14 @@
 		var ref = $('#evts').jstree(true),
 			sel = ref.get_selected();
 		if(!sel.length) { return false; }
+
 		sel = sel[0];
+		// node = $('#evts').jstree(true).get_node(sel);
+		// pos = "last";
+		// if(node.type == 'list') {
+		// 	pos = "first";
+		// }
+
 		sel = ref.create_node(sel, {"type":"item"});
 		if(sel) {
 			ref.edit(sel);
@@ -150,6 +157,8 @@
 	function add_sequence_number(){
 		num = Number($('#modal-sequence-num').val());
 		if(num > 0) {
+			// #TODO: If you have this number already then just skip it...
+
 			//for now just put it at the end
 			list_ref = $('#'+clicked_sequence_id+'_form_group');
 			node_id = $(list_ref).attr('data-node-id');
@@ -172,102 +181,141 @@
 
 					if(num < child_num && !added) {
 						added = true;
-						$(child).before(buildTabContent(tabId, sub_node, parent_id, num));
+						$(child).before(buildTabContent(tabId, sub_node, parent_id, num, null));
 					}
 				});
 			}
 			else if(fields.length == 2) {
 				child_num = Number($(fields).last().attr('data-sequence-num'));
 				if (child_num < num) {
-					$(fields).last().after(buildTabContent(tabId, sub_node, parent_id, num));
+					$(fields).last().after(buildTabContent(tabId, sub_node, parent_id, num, null));
 				}
 				else if (child_num > num) {
-					$(fields).last().before(buildTabContent(tabId, sub_node, parent_id, num));
+					$(fields).last().before(buildTabContent(tabId, sub_node, parent_id, num, null));
 				}
 				added = true;
 			}
 
 			if(!added) {
-				$(list_ref).parent().append(buildTabContent(tabId, sub_node, parent_id, num));
+				$(list_ref).parent().append(buildTabContent(tabId, sub_node, parent_id, num, null));
 			}
 			$('#modal-content-sequence-num').modal('hide');
 		}
 	}
 
 	function recursivelyFillInForm(formPart, markupPart, path, level){
-		if(markupPart['extract'] == "") {
+		if(markupPart['extract'] == "" && ! 'sequence' in markupPart) {
 			return;
 		}
 
-		var keys = Object.keys(markupPart);
 		var isList = false;
-		for(i = 0; i < keys.length; i++){
-			var key = keys[i];
-			if(key == 'sequence'){
-				isList = true;
-			}
+		if('sequence' in markupPart) {
+			isList = true;
 		}
 
 		if(isList){
 			var fields = $(formPart).children('.form-group');
 			var list = [];
+			var sequnce_number_to_index = {};
 			list[0] = markupPart['extract'];
 			var sequence = markupPart['sequence'];
 			for(var i = 0; i < sequence.length; i++){
 				list.push(sequence[i]['extract']);
-				// if(sequence[i].sequence_number == 99999){
-				// 	list.push(sequence[i]['extract']);
-				// }
-				// else{
-				// 	list[sequence[i]['sequence_number']] = sequence[i]['extract'];
-				// }
+				sequnce_number_to_index[sequence[i]['sequence_number']] = i;
 			}
 			$.each(fields, function(index, child){
 				var field = this;
-				var input = $(field).find('.form-control');
-				$(input).val(list[index]);
+                // this is where we look for the ##DONTCARE## to split the item
+                if(list[index] && list[index].indexOf('##DONTCARE##') > -1) {
+                    $(field).find('.compress_button').click();
+                    var inputs = $(field).find('.form-control');
+                    var vals = list[index].split('##DONTCARE##');
+                    $(inputs).first().val(vals[0]);
+                    $(inputs).last().val(vals[1]);
+                }
+                else {
+                    var input = $(field).find('.form-control');
+                    $(input).val(list[index]);
+                }
 			})
 
 			if(sequence.length > 0) {
-				// var numberOfSubnodes = Object.keys(sequence[0]).length - 2;
-				domSubNodes = $(formPart).children('.form-horizontal.border');
-				$.each(domSubNodes, function(index, child){
-					// var listNumber = (index - (index % numberOfSubnodes))/numberOfSubnodes;
-					var field = $(this).children('.form-group');
-					var listNumber = $(field[0]).attr('data-sequence-num') - 1;
-					var listItem = sequence[listNumber];
-					var label = $(field[0]).find('.control-label').contents().text();
-					var subKeys = Object.keys(listItem);
+				domSubNodes = $(formPart).find('.form-horizontal.border');
+				$.each(domSubNodes, function(index, child) {
+					var field = $(this).find('.form-group').first();
+					var label = $(field).find('.control-label').first().contents().text();
 
-					// BA: Updated to use sub_rules for return values... TODO maybe change this back??
-					if(subKeys.indexOf('sub_rules') > -1) {
-						sub_rules_keys = Object.keys(listItem['sub_rules']);
-						for(var i = 0; i < sub_rules_keys.length; i++){
-					 		if(sub_rules_keys[i] == label){
-					 			var markupNode = listItem['sub_rules'][sub_rules_keys[i]];
-					 			recursivelyFillInForm(this, jQuery.extend(true, {}, markupNode), path.slice(), level + 1);
-					 		}
+					var sequence_num = Number($(field).data('sequence-num'));
+					var listNumber = sequnce_number_to_index[sequence_num]
+
+					var listItem = null;
+
+					if (sequence[listNumber] ) {
+						if('sub_rules' in sequence[listNumber]) {
+							listItem = sequence[listNumber]['sub_rules'][label];
+						}
+						else {
+							listItem = sequence[listNumber][label];
 						}
 					}
-					else {
-						for(var i = 0; i < subKeys.length; i++){
-							if(subKeys[i] == label){
-								var markupNode = listItem[subKeys[i]];
-								recursivelyFillInForm(this, jQuery.extend(true, {}, markupNode), path.slice(), level + 1);
-							}
-						}
+
+					if(listItem) {
+						recursivelyFillInForm(this, jQuery.extend(true, {}, listItem), path.slice(), level + 1)
 					}
+					// var field = $(this).children('.form-group');
+					// var listNumber = $(field[0]).data('sequence-num');
+					// console.log($(field[0]));
+					// if(listNumber == 99999) {
+					// 	listNumber = sequence.length-1;
+					// }
+					// var listItem = sequence[listNumber];
+					// console.log(listItem);
+					// var label = $(field[0]).find('.control-label').contents().text();
+					// console.log(label);
+					// // console.log(listItem);
+					// // console.log(label);
+					// var subKeys = Object.keys(listItem);
+
+					// // BA: Updated to use sub_rules for return values... TODO maybe change this back??
+					// if(subKeys.indexOf('sub_rules') > -1) {
+					// 	sub_rules_keys = Object.keys(listItem['sub_rules']);
+					// 	for(var i = 0; i < sub_rules_keys.length; i++){
+					//  		if(sub_rules_keys[i] == label){
+					//  			var markupNode = listItem['sub_rules'][sub_rules_keys[i]];
+					//  			recursivelyFillInForm(this, jQuery.extend(true, {}, markupNode), path.slice(), level + 1);
+					//  		}
+					// 	}
+					// }
+					// else {
+					// 	for(var i = 0; i < subKeys.length; i++){
+					// 		if(subKeys[i] == label){
+					// 			var markupNode = listItem[subKeys[i]];
+					// 			recursivelyFillInForm(this, jQuery.extend(true, {}, markupNode), path.slice(), level + 1);
+					// 		}
+					// 	}
+					// }
 					
 				});
 			}
 
 		} else{
+			var keys = Object.keys(markupPart);
 			for(var i = 0; i < keys.length; i++){
 				var key = keys[i];
 				if(key == 'extract'){
 				 	var field = $(formPart).children('.form-group');
-					var input = $(field).find('.form-control')
-					$(input).val(markupPart[key]);
+                    // this is where we look for the ##DONTCARE## to split the item
+                    if(markupPart[key] && markupPart[key].indexOf('##DONTCARE##') > -1) {
+                        $(field).find('.compress_button').click();
+                        var inputs = $(field).find('.form-control');
+                        var vals = markupPart[key].split('##DONTCARE##');
+                        $(inputs).first().val(vals[0]);
+                        $(inputs).last().val(vals[1]);
+                    }
+                    else {
+                        var input = $(field).find('.form-control');
+                        $(input).val(markupPart[key]);
+                    }
 				}
 
 				domSubNodes = $(formPart).children('.form-horizontal.border');
@@ -384,7 +432,11 @@
 								parent_id = $(child).context.id.replace('_form_group', '');
 								if(parent_node.type == 'list') {
 									if(sequence_number) {
-										$(child).after(page_form_border_string.replace('##FORM_GROUPS##', buildTabContent(tabId, data.node, parent_id, sequence_number)));
+										var sibling = $(child);
+										for(var s = 0; s < parent_node.children.length - 1; s++) {
+											sibling = $(sibling).next();
+										}
+										$(sibling).after(page_form_border_string.replace('##FORM_GROUPS##', buildTabContent(tabId, data.node, parent_id, sequence_number)));
 									}
 								}
 								else {
@@ -459,7 +511,11 @@
 	        var anchor = $(this).siblings('a');
 
 	        //TODO: Tell the server to delete this file
-	        delete urls[anchor.text()];
+            $.post( "/delete_markup_url", JSON.stringify({'file_name': anchor.text(), 'project_folder': project_folder}), function( data ) {
+                delete urls[anchor.text()];
+			}).fail(function(data) {
+                alert('Error deleting page...');
+			});
 
 	        $(anchor.attr('href')).remove();
 	        $(this).parent().remove();
@@ -562,7 +618,19 @@
 
 	var uniqueEntryId = 1;
 	var parentNodeMap = {};
-	function buildTabContent(tabId, node, parentFormGroupId, sequence_number, markup) {
+	function buildTabContent(tabId, node_id, parentFormGroupId, sequence_number, markup) {
+		var node = node_id;
+		if( Object.prototype.toString.call(node_id) == '[object String]' ) {
+			console.log('This thing is a STRING!');
+			node = $('#evts').jstree(true).get_node(node);
+		}
+
+		// console.log("buildTabContent====");
+		// console.log(node);
+		// console.log(parentFormGroupId);
+		// console.log(sequence_number);
+		// console.log(markup);
+
 		var tab_content = '';
 		var list_info = '';
 		var list_button = '';
@@ -590,8 +658,16 @@
 						for(var i = 0; i < markup['sequence'].length; i++) {
 							sub_node = $.extend(true, {}, node );
 							sub_node.type = 'list_item'
-							sub_node.text = node.text + ' ['+(i+1)+']';
-							tab_content += buildTabContent(tabId, sub_node, parentFormGroupId, i+1, markup['sequence'][i]);
+                            
+                            sequence_number_str = '' + markup['sequence'][i]['sequence_number']
+                            if(markup['sequence'][i]['sequence_number'] == 99999) {
+                                sequence_number_str = 'last'
+                            }
+
+
+                            
+							sub_node.text = node.text + ' ['+sequence_number_str+']';
+							tab_content += buildTabContent(tabId, sub_node, parentFormGroupId, markup['sequence'][i]['sequence_number'], markup['sequence'][i]);
 						}
 					}
 				}
@@ -925,6 +1001,7 @@
 			    	if(!$(this).hasClass('add-contact')) {
 				    	page_id = $(this).text();
 			    		form = $('#' + $(this).context.id.slice(1)).children().children();
+                        
 						recursivelyFillInForm(form, markup_json[page_id], [page_id], 1);
 
 						// nodes = form.children('.form-horizontal.border')
@@ -1028,7 +1105,7 @@
 			    	<div class="modal-body">
 			        	<div class="form-group">
 			        		<div class="html_link"><a href="/projects" target="_blank">List of projects <i class="glyphicon glyphicon-new-window"></i></a></div>
-				            <input id="modal-project-name" type="text" class="form-control" placeholder="Enter Project Folder Name"></input>
+				            <input id="modal-project-name" type="text" class="form-control" placeholder="Enter Project Folder Name" autofocus></input>
 				        </div>
 			        <div id="modal-project-name-error" class="error"></div>
 			    </div>
@@ -1069,7 +1146,8 @@
 			<div class="modal-content">
 			    <div class="modal-header">
 			        <a class="close" data-dismiss="modal">×</a>
-			        <h3>Change Page Name</h3>
+			        <h3>Add a Row</h3>
+			        <h5>(99999 for last)</h5>
 			    </div>
 			    <div class="modal-body">
 			        <form class="form change_name">
@@ -1079,7 +1157,7 @@
 			        </form>
 			    </div>
 			    <div class="modal-footer">
-			        <input class="btn btn-success btn-sm" onclick="add_sequence_number();" value="Change it!">
+			        <input class="btn btn-success btn-sm" onclick="add_sequence_number();" value="Add it!">
 			        <a href="#" class="btn" data-dismiss="modal">Cancel</a>
 			    </div>
 		    </div><!-- /.modal-content -->

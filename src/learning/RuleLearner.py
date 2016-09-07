@@ -9,14 +9,14 @@ import json
 import time
 
 import logging
-logger = logging.getLogger("landmark")
-# logging.basicConfig(level=logging.INFO)
 # logger = logging.getLogger("landmark")
-# handler = logging.FileHandler('landmark.log')
-# handler.setLevel(logging.INFO)
-# formatter = logging.Formatter(u'%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-# handler.setFormatter(formatter)
-# logger.addHandler(handler)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("landmark")
+handler = logging.FileHandler('landmark.log')
+handler.setLevel(logging.INFO)
+formatter = logging.Formatter(u'%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
 
 class Usage(Exception):
     def __init__(self, msg):
