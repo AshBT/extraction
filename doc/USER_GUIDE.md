@@ -4,7 +4,7 @@ Tested with Python 2.7.
 
 ### Install Required Packages
 ```
-cd memex/memexpython
+cd extraction
 pip install -r requirements.txt
 ```
 
@@ -21,7 +21,7 @@ In the UI, click on the Corpora tab. Scroll down and select stopwords, then clic
 
 ## Run
 ```
-cd memex/memexpython/src
+cd src
 python runserver.py
 
 go to:
