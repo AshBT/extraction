@@ -1,5 +1,21 @@
 src/angular_flask/static/project_folders
 
+#Eclipse
+*.pydevproject
+.project
+.metadata
+bin/**
+tmp/**
+tmp/**/*
+*.tmp
+*.bak
+*.swp
+*~.nib
+local.properties
+.classpath
+.settings/
+.loadpath
+
 #virtualenv
 .venv
 
