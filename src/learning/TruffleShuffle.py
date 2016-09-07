@@ -285,16 +285,17 @@ class TruffleShuffle(object):
                         'ANCHOR': rule_anchors[rule]
                     }
         
-        clusterCount = 1
-        for rule in sorted(final_clusters, key=lambda x: len(final_clusters[x]['MEMBERS']), reverse=True):
-            
-            final_clusters[rule]['NAME'] = 'cluster' + format(clusterCount, '03')
-            template = self.induce_template(final_clusters[rule]['MEMBERS'])
-            template.learnStripes()
-            final_clusters[rule]['TEMPLATE_STRING'] = ' '.join(value['stripe'] for value in template._stripes)
-            clusterCount += 1
-
-        return self.__merge_clusters(final_clusters)
+#         clusterCount = 1
+#         for rule in sorted(final_clusters, key=lambda x: len(final_clusters[x]['MEMBERS']), reverse=True):
+#             
+#             final_clusters[rule]['NAME'] = 'cluster' + format(clusterCount, '03')
+#             template = self.induce_template(final_clusters[rule]['MEMBERS'])
+#             template.learnStripes()
+#             final_clusters[rule]['TEMPLATE_STRING'] = ' '.join(value['stripe'] for value in template._stripes)
+#             clusterCount += 1
+# 
+#         return self.__merge_clusters(final_clusters)
+        return final_clusters
 
 class TruffleShuffleExperimenter(object):
     def __init__(self, truthfile='/Users/matt/Projects/memex/memexpython/Matt_Memex_Data/classified-ads-list.csv',
