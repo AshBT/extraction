@@ -210,7 +210,7 @@ The “Downloads” tab allows you to download both rules and markup for any of 
 
 If you need to transfer a project, you can find all project folders under:
 ```
-memex/memexpython/src/angular_flask/static/project_folders
+src/angular_flask/static/project_folders
 ```
 
 
