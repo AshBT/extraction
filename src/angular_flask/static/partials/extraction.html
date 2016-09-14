@@ -130,64 +130,94 @@
 		});
 
 	function recursivelyFillInForm(formPart, markupPart, path, level){
-		if(markupPart['extract'] == "") {
+		if(markupPart['extract'] == "" && ! 'sequence' in markupPart) {
 			return;
 		}
 
-		var keys = Object.keys(markupPart);
 		var isList = false;
-		for(i = 0; i < keys.length; i++){
-			var key = keys[i];
-			if(key == 'sequence'){
-				isList = true;
-			}
+		if('sequence' in markupPart) {
+			isList = true;
 		}
 
 		if(isList){
 			var fields = $(formPart).children('.form-group');
 			var list = [];
+			var sequnce_number_to_index = {};
 			list[0] = markupPart['extract'];
 			var sequence = markupPart['sequence'];
 			for(var i = 0; i < sequence.length; i++){
 				list.push(sequence[i]['extract']);
-				// if(sequence[i].sequence_number == 99999){
-				// 	list.push(sequence[i]['extract']);
-				// }
-				// else{
-				// 	list[sequence[i]['sequence_number']] = sequence[i]['extract'];
-				// }
+				sequnce_number_to_index[sequence[i]['sequence_number']] = i;
 			}
 			$.each(fields, function(index, child){
 				var field = this;
-				var input = $(field).find('.form-control');
-				$(input).val(list[index]);
+                // this is where we look for the ##DONTCARE## to split the item
+                if(list[index] && list[index].indexOf('##DONTCARE##') > -1) {
+                    $(field).find('.compress_button').click();
+                    var inputs = $(field).find('.form-control');
+                    var vals = list[index].split('##DONTCARE##');
+                    $(inputs).first().val(vals[0]);
+                    $(inputs).last().val(vals[1]);
+                }
+                else {
+                    var input = $(field).find('.form-control');
+                    $(input).val(list[index]);
+                }
 			})
 
 			if(sequence.length > 0) {
-				// var numberOfSubnodes = Object.keys(sequence[0]).length - 2;
-				domSubNodes = $(formPart).children('.form-horizontal.border');
-				$.each(domSubNodes, function(index, child){
-					// var listNumber = (index - (index % numberOfSubnodes))/numberOfSubnodes;
-					var field = $(this).children('.form-group');
-					var listNumber = $(field[0]).attr('data-sequence-num') - 1;
-					var listItem = sequence[listNumber];
-					var label = $(field[0]).find('.control-label').contents().text();
-					var subKeys = Object.keys(listItem);
+				domSubNodes = $(formPart).find('.form-horizontal.border');
+				$.each(domSubNodes, function(index, child) {
+					var field = $(this).find('.form-group').first();
+					var label = $(field).find('.control-label').first().contents().text();
 
-					// BA: Updated to use sub_rules for return values... TODO maybe change this back??
-					if(subKeys.indexOf('sub_rules') > -1) {
-						sub_rules_keys = Object.keys(listItem['sub_rules']);
-						for(var i = 0; i < sub_rules_keys.length; i++){
-					 		if(sub_rules_keys[i] == label){
-					 			var markupNode = listItem['sub_rules'][sub_rules_keys[i]];
-					 			recursivelyFillInForm(this, jQuery.extend(true, {}, markupNode), path.slice(), level + 1);
-					 		}
+					var sequence_num = Number($(field).data('sequence-num'));
+					var listNumber = sequnce_number_to_index[sequence_num]
+
+					var listItem = null;
+
+					if (sequence[listNumber] ) {
+						if('sub_rules' in sequence[listNumber]) {
+							listItem = sequence[listNumber]['sub_rules'][label];
+						}
+						else {
+							listItem = sequence[listNumber][label];
 						}
 					}
-					// for(var i = 0; i < subKeys.length; i++){
-					// 	if(subKeys[i] == label){
-					// 		var markupNode = listItem[subKeys[i]];
-					// 		recursivelyFillInForm(this, jQuery.extend(true, {}, markupNode), path.slice(), level + 1);
+
+					if(listItem) {
+						recursivelyFillInForm(this, jQuery.extend(true, {}, listItem), path.slice(), level + 1)
+					}
+					// var field = $(this).children('.form-group');
+					// var listNumber = $(field[0]).data('sequence-num');
+					// console.log($(field[0]));
+					// if(listNumber == 99999) {
+					// 	listNumber = sequence.length-1;
+					// }
+					// var listItem = sequence[listNumber];
+					// console.log(listItem);
+					// var label = $(field[0]).find('.control-label').contents().text();
+					// console.log(label);
+					// // console.log(listItem);
+					// // console.log(label);
+					// var subKeys = Object.keys(listItem);
+
+					// // BA: Updated to use sub_rules for return values... TODO maybe change this back??
+					// if(subKeys.indexOf('sub_rules') > -1) {
+					// 	sub_rules_keys = Object.keys(listItem['sub_rules']);
+					// 	for(var i = 0; i < sub_rules_keys.length; i++){
+					//  		if(sub_rules_keys[i] == label){
+					//  			var markupNode = listItem['sub_rules'][sub_rules_keys[i]];
+					//  			recursivelyFillInForm(this, jQuery.extend(true, {}, markupNode), path.slice(), level + 1);
+					//  		}
+					// 	}
+					// }
+					// else {
+					// 	for(var i = 0; i < subKeys.length; i++){
+					// 		if(subKeys[i] == label){
+					// 			var markupNode = listItem[subKeys[i]];
+					// 			recursivelyFillInForm(this, jQuery.extend(true, {}, markupNode), path.slice(), level + 1);
+					// 		}
 					// 	}
 					// }
 					
@@ -195,12 +225,23 @@
 			}
 
 		} else{
+			var keys = Object.keys(markupPart);
 			for(var i = 0; i < keys.length; i++){
 				var key = keys[i];
 				if(key == 'extract'){
 				 	var field = $(formPart).children('.form-group');
-					var input = $(field).find('.form-control')
-					$(input).val(markupPart[key]);
+                    // this is where we look for the ##DONTCARE## to split the item
+                    if(markupPart[key] && markupPart[key].indexOf('##DONTCARE##') > -1) {
+                        $(field).find('.compress_button').click();
+                        var inputs = $(field).find('.form-control');
+                        var vals = markupPart[key].split('##DONTCARE##');
+                        $(inputs).first().val(vals[0]);
+                        $(inputs).last().val(vals[1]);
+                    }
+                    else {
+                        var input = $(field).find('.form-control');
+                        $(input).val(markupPart[key]);
+                    }
 				}
 
 				domSubNodes = $(formPart).children('.form-horizontal.border');
@@ -235,7 +276,18 @@
 
 	var uniqueEntryId = 1;
 	var parentNodeMap = {};
-	function buildTabContent(tabId, node, parentFormGroupId, sequence_number, markup) {
+	function buildTabContent(tabId, node_id, parentFormGroupId, sequence_number, markup) {
+		var node = node_id;
+		if( Object.prototype.toString.call(node_id) == '[object String]' ) {
+			node = $('#evts').jstree(true).get_node(node);
+		}
+
+		// console.log("buildTabContent====");
+		// console.log(node);
+		// console.log(parentFormGroupId);
+		// console.log(sequence_number);
+		// console.log(markup);
+
 		var tab_content = '';
 		var list_info = '';
 		var list_button = '';
@@ -263,8 +315,14 @@
 						for(var i = 0; i < markup['sequence'].length; i++) {
 							sub_node = $.extend(true, {}, node );
 							sub_node.type = 'list_item'
-							sub_node.text = node.text + ' ['+(i+1)+']';
-							tab_content += buildTabContent(tabId, sub_node, parentFormGroupId, i+1, markup['sequence'][i]);
+                            
+                            sequence_number_str = '' + markup['sequence'][i]['sequence_number']
+                            if(markup['sequence'][i]['sequence_number'] == 99999) {
+                                sequence_number_str = 'last'
+                            }
+                            
+							sub_node.text = node.text + ' ['+sequence_number_str+']';
+							tab_content += buildTabContent(tabId, sub_node, parentFormGroupId, markup['sequence'][i]['sequence_number'], markup['sequence'][i]);
 						}
 					}
 				}
@@ -305,14 +363,32 @@
 			// 	list_info = ' data-parent-node-is-list=true data-sequence-num=' + sequence_number;
 			// }
 		}
+
+		// if(node.type == 'list') {
+		// 	list_info += ' style="display:none;"';
+		// }
 		tab_content = tab_content.replace('##LIST_INFO##', list_info).replace('##LIST_ADD_BUTTON##', list_button);
+
+		var location_info = ' ';
+		if(markup && markup['starting_token_location']) {
+			location_info += ' data-starting-token-location=' + markup['starting_token_location'];
+		}
+		if(markup && markup['ending_token_location']) {
+			location_info += ' data-ending-token-location=' + markup['ending_token_location'];
+		}
+		tab_content = tab_content.replace('##LOCATION_INFO##', location_info);
 
 		if(node.children && node.type != 'list') {
 			$.each( node.children, function( index, child ) {
 				// before_node_id = node_id;
 				var sub_markup = null;
-				if(markup && child.text in markup) {
-					sub_markup = markup[child.text];
+				if(markup) {
+					if(child.text in markup) {
+						sub_markup = markup[child.text];
+					}
+					else if(markup['sub_rules'] && child.text in markup['sub_rules']) {
+						sub_markup = markup['sub_rules'][child.text];
+					}
 				}
 				tab_content += page_form_border_string.replace('##FORM_GROUPS##', buildTabContent(tabId, child, node_id, sequence_number, sub_markup));
 				// node_id = before_node_id;
