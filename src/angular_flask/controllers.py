@@ -30,11 +30,14 @@ for model_name in app.config['API_MODELS']:
 session = api_manager.session
 
 def download_url(project_folder, page_url):
-    files = next(os.walk(os.path.join(app.static_folder, 'project_folders', project_folder)))[2]
-    file_name = 'page_' + str(len(files) + 1) + ".html"
+    page_num = 1
 
-
+    file_name = 'page_' + str(page_num) + ".html"
     file_location = os.path.join(app.static_folder, 'project_folders', project_folder, file_name)
+    while os.path.exists(file_location):
+        page_num = page_num + 1
+        file_name = 'page_' + str(page_num) + ".html"
+        file_location = os.path.join(app.static_folder, 'project_folders', project_folder, file_name)
 
     req = urllib2.Request(page_url, headers={'User-Agent' : "Magic Browser"}) 
     con = urllib2.urlopen(req)

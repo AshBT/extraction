@@ -80,8 +80,8 @@
 			urls[page_name] = new_page_url;
 
 		    var id = $(".nav-tabs").children().length; //think about it ;)
-		    var tabId = 'contact_' + id;
-		    $(".add-contact").closest('li').before('<li><a id="#contact_' + id + '" href="#contact_' + id + '">' + page_name + '</a> <span> <i class="glyphicon glyphicon-remove-circle"></i> </span></li>');
+		    var tabId = 'contact_' + page_name.replace('.html', '');
+		    $(".add-contact").closest('li').before('<li><a id="#' + tabId + '" href="#' + tabId + '">' + page_name + '</a> <span> <i class="glyphicon glyphicon-remove-circle"></i> </span></li>');
 
 	    	var tree_json = $("#evts").jstree(true).get_json('#');
 	    	
@@ -621,7 +621,6 @@
 	function buildTabContent(tabId, node_id, parentFormGroupId, sequence_number, markup) {
 		var node = node_id;
 		if( Object.prototype.toString.call(node_id) == '[object String]' ) {
-			console.log('This thing is a STRING!');
 			node = $('#evts').jstree(true).get_node(node);
 		}
 
@@ -977,10 +976,10 @@
 
 		    	// $('.add-contact').click();
     		    id = $(".nav-tabs").children().length - 1; //think about it ;)
-			    var tabId = 'contact_' + id;
+			    var tabId = 'contact_' + page_name.replace('.html', '');
 			    $('#\\' + '#contact_' + id).html(item);
 
-				$(".add-contact").closest('li').before('<li><a id="#contact_' + id + '" href="#contact_' + id + '"><i class="glyphicon glyphicon-pencil"></i>' + page_name + '</a> <span> <i class="glyphicon glyphicon-remove-circle"></i> </span></li>');
+				$(".add-contact").closest('li').before('<li><a id="#' + tabId + '" href="#' + tabId + '"><i class="glyphicon glyphicon-pencil"></i>' + page_name + '</a> <span> <i class="glyphicon glyphicon-remove-circle"></i> </span></li>');
 
 		    	var tree_json = $("#evts").jstree(true).get_json('#');
 		    	

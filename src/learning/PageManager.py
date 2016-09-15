@@ -1155,6 +1155,7 @@ class PageManager(object):
             logger.info("No item rule learned for %s attempting to learn from locations or first and last items.", key)
             for page_markup in pages:
                 extract = u''
+                end_extract = u''
                 starting_token_location = -1
                 ending_token_location = -1
                 page_id = page_markup.keys()[0]
