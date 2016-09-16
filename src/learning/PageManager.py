@@ -1164,6 +1164,7 @@ class PageManager(object):
                     for item in page_markup[page_id]['sequence']:
                         sequence_number = item['sequence_number']
                         if sequence_number == 1:
+                            highest_sequence_number = 1
                             extract = extract + item['extract']
                             if 'starting_token_location' in item:
                                 starting_token_location = item['starting_token_location']
@@ -1182,18 +1183,21 @@ class PageManager(object):
                         if stripe['page_locations'][page_id] in list_range:
                             stripes_to_remove.append(stripe)
                     self._stripes = [x for x in self._stripes if x not in stripes_to_remove]
-                if extract and end_extract:
-                    # TODO: BA check this
-                    # see if there are locations for this thing... if so remove those stripes in the middle... we have to!
-                    shortest_pairs = self.getPossibleLocations(page_id, extract + LONG_EXTRACTION_SEP + end_extract, False)
-                    for pair in shortest_pairs:
-                        list_range = range(pair[0], pair[1])
-                        stripes_to_remove = []
-                        for stripe in self._stripes:
-                            if stripe['page_locations'][page_id] in list_range:
-                                stripes_to_remove.append(stripe)
-                        self._stripes = [x for x in self._stripes if x not in stripes_to_remove]
-                    page_markup[page_id]['extract'] = extract + LONG_EXTRACTION_SEP + end_extract            
+                if extract:
+                    if highest_sequence_number == 1:
+                        page_markup[page_id]['extract'] = extract
+                    elif end_extract:
+                        # TODO: BA check this
+                        # see if there are locations for this thing... if so remove those stripes in the middle... we have to!
+                        shortest_pairs = self.getPossibleLocations(page_id, extract + LONG_EXTRACTION_SEP + end_extract, False)
+                        for pair in shortest_pairs:
+                            list_range = range(pair[0], pair[1])
+                            stripes_to_remove = []
+                            for stripe in self._stripes:
+                                if stripe['page_locations'][page_id] in list_range:
+                                    stripes_to_remove.append(stripe)
+                            self._stripes = [x for x in self._stripes if x not in stripes_to_remove]
+                        page_markup[page_id]['extract'] = extract + LONG_EXTRACTION_SEP + end_extract            
             (item_rule, isSequence, hasSubRules) = self.__learn_item_rule(key, pages)
         
         if item_rule is None:
