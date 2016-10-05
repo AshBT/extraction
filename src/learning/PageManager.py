@@ -24,6 +24,8 @@ cachedStopWords.append('.')
 cachedStopWords.append(':')
 cachedStopWords.append('-')
 cachedStopWords.append('@')
+cachedStopWords.append('://')
+cachedStopWords.append('://www.')
 
 list_tags = {
            '<dl': ['/dl>', '<dt', '/dd>']
@@ -627,6 +629,17 @@ class PageManager(object):
                     for name in names:
                         if name in row_markups[markup_page]:
                             markup[page_id][list_name]['sequence'][int(sequence_num)-1][name] = row_markups[markup_page][name]
+            else:
+                #remove the html from the row items since there are no sub rules
+                for page_id in markup.keys():
+                    for seq_item in markup[page_id][list_name]['sequence']:
+                        seq_item_extract = seq_item['extract']
+                        processor = RemoveHtml(seq_item_extract)
+                        seq_item_extract = processor.post_process()
+                        seq_item_extract = seq_item_extract.strip()
+                        seq_item['extract'] = seq_item_extract
+                    
+                list_names[list_name] = {}
         
         return markup, list_names
     
@@ -860,6 +873,7 @@ class PageManager(object):
                             extract = extract.strip()
                         if extract:
                             markup[page_id][name] = {}
+                            markup[page_id][name] = extraction[name]
                             markup[page_id][name]['extract'] = extract
                             counts[name] = counts[name] + 1
                     if name not in names:

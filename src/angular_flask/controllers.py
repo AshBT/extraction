@@ -423,6 +423,17 @@ def save_markup():
                     markup[key].update(list_markup[key])
 
             count = 1
+
+            # Generate the schema from the item slots
+            for name in names:
+                count += 1
+                auto_markup_slot = copy.deepcopy(markup_slot)
+                auto_markup_slot['text'] = name
+                auto_markup_slot['id'] = 'j1_'+str(count)
+                auto_markup_slot['li_attr']['id'] = 'j1_'+str(count)
+                auto_markup_slot['a_attr']['id'] = 'j1_'+str(count)+'_anchor'
+                schema[0]['children'].append(auto_markup_slot)
+                
             # Generate the schema from the list slots
             for list_name in list_names.keys():
                 count += 1
@@ -443,16 +454,7 @@ def save_markup():
                     children.append(auto_markup_slot_sub)
                 auto_markup_slot['children'] = children
                 schema[0]['children'].append(auto_markup_slot)
-
-            # Generate the schema from the item slots
-            for name in names:
-                count += 1
-                auto_markup_slot = copy.deepcopy(markup_slot)
-                auto_markup_slot['text'] = name
-                auto_markup_slot['id'] = 'j1_'+str(count)
-                auto_markup_slot['li_attr']['id'] = 'j1_'+str(count)
-                auto_markup_slot['a_attr']['id'] = 'j1_'+str(count)+'_anchor'
-                schema[0]['children'].append(auto_markup_slot)
+                
             markup['__SCHEMA__'] = schema
             markup['__URLS__'] = urls
 
