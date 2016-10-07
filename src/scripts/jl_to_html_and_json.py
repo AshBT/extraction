@@ -26,7 +26,7 @@ def jl_to_html_and_json(json_lines_file, output_directory):
                         output_file.close()
                     
                     with codecs.open(os.path.join(html_dir, crawl_page['_id']+'.html'), "w", "utf-8") as output_file:
-                        output_file.write(crawl_page['raw_content'])
+                        output_file.write(crawl_page['_source']['raw_content'])
                         output_file.close()
             
                 except:
@@ -47,14 +47,14 @@ def main(argv=None):
             opts, args = getopt.getopt(argv[1:], "h", ["help"])
             for opt, arg in opts:
                 if opt in [('-h', ''), ('--help', '')]:
-                    raise Usage('python jl_to_html_and_json -l limit [JL_FILE]')
+                    raise Usage('python jl_to_html_and_json [JL_FILE]')
             
             if len(args) == 1:
                 jl_file = args[0]
                 dir_path = os.path.dirname(os.path.realpath(jl_file))
                 jl_to_html_and_json(jl_file, dir_path)
             else:
-                raise Usage('python jl_to_html_and_json -l limit [JL_FILE]')
+                raise Usage('python jl_to_html_and_json [JL_FILE]')
             
         except getopt.error, msg:
             raise Usage(msg)
