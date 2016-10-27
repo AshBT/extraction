@@ -1,3 +1,11 @@
+#### This project is obsolete and has been replaced by three new repos:
+[landmark-extractor]
+
+[landmark-ml]
+
+[landmark-ui]
+
+
 # Landmark Markup Tool
 
 ### Install the proper requirements
@@ -205,3 +213,7 @@ There are two types of rules currently that can be used to extract information f
 * strip_end_regex [Optional]: A quote escaped regular expression to strip off the end of the extracted result
 * validation [Optional]: A quote escaped regular expression of what the extracted result must pass - if not an error is thrown for the entire RuleSet.
 * removehtml [Optional]: Boolean to remove HTML characters from the extracted result
+
+[landmark-extractor]: <https://github.com/inferlink/landmark-extractor>
+[landmark-ml]: <https://github.com/inferlink/landmark-ml>
+[landmark-ui]: <https://github.com/inferlink/landmark-ui>
